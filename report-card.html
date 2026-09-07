@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en-CA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Student Report Card</title>
+<style>
+  /* ---------------------------------------------------------------
+     Self-contained report card. No external stylesheet, script,
+     font or image: the file makes no network request of any kind.
+     Absolute units (mm / pt) are used throughout so the on-screen
+     layout and the printed page are the same layout.
+     --------------------------------------------------------------- */
+
+  :root {
+    --ink:        #1f2a44;
+    --ink-soft:   #4a5568;
+    --accent:     #9a7b3f;
+    --rule:       #c3b79b;
+    --tint:       #f6f2e8;
+    --paper:      #fffdf8;
+    --page:       #e7e5df;
+    --invalid:    #b32d2d;
+    --invalid-bg: #fbeaea;
+
+    --serif: Georgia, "Times New Roman", "Liberation Serif", serif;
+    --sans: "Segoe UI", Roboto, "Helvetica Neue", Arial, "Liberation Sans", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    padding: 8mm;
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 10pt;
+    line-height: 1.35;
+  }
+
+  /* ---------- on-screen toolbar (never printed) ---------- */
+
+  .toolbar {
+    width: 186mm;
+    max-width: 100%;
+    margin: 0 auto 6mm;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4mm;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 2mm;
+    padding: 2.4mm 5mm;
+    border: 0.4mm solid var(--ink);
+    border-radius: 1mm;
+    background: var(--ink);
+    color: #fff;
+    font-family: var(--sans);
+    font-size: 10pt;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+  }
+
+  .btn:hover { background: #2c3a5c; }
+
+  .btn:focus-visible {
+    outline: 0.6mm solid var(--accent);
+    outline-offset: 0.8mm;
+  }
+
+  .btn__icon { width: 4.4mm; height: 4.4mm; }
+
+  .toolbar__hint {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 9pt;
+  }
+
+  /* ---------- the card ---------- */
+
+  .card {
+    position: relative;
+    width: 186mm;               /* A4 (210mm) less the 12mm page margins */
+    min-height: 265mm;
+    margin: 0 auto;
+    padding: 11mm 12mm 10mm;
+    background: var(--paper);
+    border: 0.5mm solid var(--rule);
+    outline: 0.25mm solid var(--accent);
+    outline-offset: -2.4mm;     /* inset, so the frame cannot spill onto page 2 */
+    box-shadow: 0 1mm 4mm rgba(31, 42, 68, 0.18);
+    display: flex;
+    flex-direction: column;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* corner flourishes, drawn with two-sided borders on four pseudo-elements */
+  .card::before,
+  .card::after,
+  .card__frame::before,
+  .card__frame::after {
+    content: "";
+    position: absolute;
+    width: 13mm;
+    height: 13mm;
+    border: 0.5mm solid var(--accent);
+    pointer-events: none;
+  }
+
+  .card::before { top: 4.4mm; left: 4.4mm; border-right: 0; border-bottom: 0; }
+  .card::after  { top: 4.4mm; right: 4.4mm; border-left: 0; border-bottom: 0; }
+
+  .card__frame { position: absolute; inset: 0; pointer-events: none; }
+  .card__frame::before { bottom: 4.4mm; left: 4.4mm; border-right: 0; border-top: 0; }
+  .card__frame::after  { bottom: 4.4mm; right: 4.4mm; border-left: 0; border-top: 0; }
+
+  /* ---------- masthead ---------- */
+
+  .masthead { text-align: center; }
+
+  .crest {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15mm;
+    height: 15mm;
+    margin-bottom: 1.5mm;
+    border: 0.4mm solid var(--accent);
+    border-radius: 50%;
+    color: var(--accent);
+  }
+
+  .crest__icon { width: 8.5mm; height: 8.5mm; }
+
+  .masthead__eyebrow,
+  .masthead__address {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 8.5pt;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .masthead__address {
+    letter-spacing: 0.04em;
+    text-transform: none;
+    font-size: 9pt;
+  }
+
+  .masthead__name {
+    margin: 1mm 0 1.5mm;
+    font-family: var(--serif);
+    font-size: 25pt;
+    font-weight: 400;
+    font-variant: small-caps;
+    letter-spacing: 0.06em;
+    line-height: 1.1;
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5mm;
+    margin: 4mm 0 3mm;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: "";
+    flex: 0 1 45mm;
+    height: 0;
+    border-top: 0.3mm solid var(--rule);
+  }
+
+  .divider__diamond {
+    width: 2.4mm;
+    height: 2.4mm;
+    background: var(--accent);
+    transform: rotate(45deg);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .masthead__title {
+    margin: 0;
+    font-family: var(--serif);
+    font-size: 14pt;
+    font-weight: 700;
+    font-variant: small-caps;
+    letter-spacing: 0.22em;
+    text-transform: lowercase;
+  }
+
+  .masthead__term {
+    margin: 1.5mm 0 0;
+    color: var(--ink-soft);
+    font-size: 9.5pt;
+    letter-spacing: 0.05em;
+  }
+
+  /* ---------- student details ---------- */
+
+  .identity {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    gap: 3mm 6mm;
+    margin: 7mm 0 6mm;
+    padding: 4mm 5mm;
+    border: 0.3mm solid var(--rule);
+    background: var(--tint);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .field { display: flex; align-items: flex-start; gap: 2.2mm; min-width: 0; }
+  .field--wide { grid-column: span 2; }
+
+  .field__icon {
+    flex: none;
+    width: 4.4mm;
+    height: 4.4mm;
+    margin-top: 1.2mm;
+    color: var(--accent);
+  }
+
+  .field__body { min-width: 0; }
+
+  .field__label {
+    display: block;
+    color: var(--ink-soft);
+    font-size: 7.5pt;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+  }
+
+  .field__value {
+    display: block;
+    min-width: 18mm;
+    font-size: 11pt;
+    font-weight: 600;
+  }
+
+  .field__value--name { font-family: var(--serif); font-size: 13pt; font-weight: 400; }
+
+  /* ---------- marks table ---------- */
+
+  .marks {
+    width: 100%;
+    border-collapse: collapse;
+    break-inside: avoid;
+  }
+
+  .marks caption {
+    padding-bottom: 2mm;
+    color: var(--ink-soft);
+    font-size: 8pt;
+    letter-spacing: 0.16em;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .marks th,
+  .marks td {
+    border: 0.25mm solid var(--rule);
+    padding: 1.9mm 2.4mm;
+    vertical-align: middle;
+  }
+
+  .marks thead th {
+    background: var(--ink);
+    color: #fff;
+    font-size: 8pt;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-align: left;
+    text-transform: uppercase;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .marks tbody tr:nth-child(even) {
+    background: var(--tint);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .col-num { width: 24mm; text-align: center; }
+  .col-grade { width: 18mm; text-align: center; }
+  .col-remark { width: 48mm; }
+
+  .subject { display: flex; align-items: center; gap: 2.2mm; }
+  .subject__icon { flex: none; width: 4mm; height: 4mm; color: var(--accent); }
+
+  .cell--num { text-align: center; font-variant-numeric: tabular-nums; }
+
+  .cell--derived {
+    text-align: center;
+    font-family: var(--serif);
+    font-size: 11pt;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  .cell--remark { color: var(--ink-soft); font-size: 9pt; }
+
+  /* ---------- summary ---------- */
+
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin-top: 5mm;
+    border: 0.4mm solid var(--ink);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .summary__cell {
+    padding: 3.5mm 4mm;
+    text-align: center;
+    border-right: 0.25mm solid var(--rule);
+  }
+
+  .summary__cell:last-child { border-right: 0; }
+  .summary__cell--accent {
+    background: var(--tint);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .summary__label {
+    display: block;
+    color: var(--ink-soft);
+    font-size: 7.5pt;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .summary__value {
+    display: block;
+    margin-top: 1mm;
+    font-family: var(--serif);
+    font-size: 15pt;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+
+  .legend {
+    margin: 2.5mm 0 0;
+    color: var(--ink-soft);
+    font-size: 8pt;
+    letter-spacing: 0.03em;
+  }
+
+  /* ---------- signatures ---------- */
+
+  .signatures {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8mm;
+    margin-top: auto;
+    padding-top: 14mm;
+  }
+
+  .signature { text-align: center; }
+
+  .signature__line {
+    height: 0;
+    margin-bottom: 1.8mm;
+    border-top: 0.3mm solid var(--ink);
+  }
+
+  .signature__role {
+    display: block;
+    font-size: 9pt;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .signature__meta {
+    display: block;
+    margin-top: 0.8mm;
+    color: var(--ink-soft);
+    font-size: 8.5pt;
+  }
+
+  /* ---------- editing affordances (screen only) ---------- */
+
+  [contenteditable="true"] { border-radius: 0.6mm; }
+
+  [contenteditable="true"]:hover {
+    background: #f0e9d8;
+    box-shadow: 0 0 0 0.7mm #f0e9d8;
+  }
+
+  [contenteditable="true"]:focus-visible,
+  [contenteditable="true"]:focus {
+    background: #fff;
+    outline: 0.5mm solid var(--accent);
+    outline-offset: 0.4mm;
+  }
+
+  .is-invalid {
+    background: var(--invalid-bg);
+    color: var(--invalid);
+    font-weight: 700;
+    box-shadow: inset 0 0 0 0.4mm var(--invalid);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ---------- print ---------- */
+
+  @page { size: A4; margin: 12mm; }
+
+  @media print {
+    body { padding: 0; background: #fff; }
+
+    .no-print { display: none !important; }
+
+    .card {
+      margin: 0;
+      min-height: 258mm;
+      box-shadow: none;
+    }
+
+    [contenteditable="true"]:hover,
+    [contenteditable="true"]:focus,
+    [contenteditable="true"]:focus-visible {
+      background: transparent;
+      box-shadow: none;
+      outline: 0;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- Icon definitions. Every icon is referenced by a same-document use element,
+     so each shape is declared once however many rows draw it. -->
+<svg class="sprite" width="0" height="0" aria-hidden="true" focusable="false"
+     style="position:absolute;width:0;height:0;overflow:hidden">
+  <defs>
+    <style>
+      symbol { fill: none; stroke: currentColor; stroke-width: 1.6;
+               stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+  <symbol id="icon-crest" viewBox="0 0 24 24">
+    <path d="M12 2.6 4.2 6.1v5.6c0 4.6 3.2 8.2 7.8 9.7 4.6-1.5 7.8-5.1 7.8-9.7V6.1L12 2.6Z"/>
+    <path d="m8.9 12.1 2.1 2.2 4.1-4.4"/>
+  </symbol>
+  <symbol id="icon-user" viewBox="0 0 24 24">
+    <circle cx="12" cy="8" r="3.4"/>
+    <path d="M5 19.6c0-3.3 3.1-5.4 7-5.4s7 2.1 7 5.4"/>
+  </symbol>
+  <symbol id="icon-id" viewBox="0 0 24 24">
+    <rect x="3" y="5" width="18" height="14" rx="2"/>
+    <circle cx="8.6" cy="10.6" r="1.9"/>
+    <path d="M5.4 16.4c.6-1.5 1.8-2.3 3.2-2.3s2.6.8 3.2 2.3M14.6 9.8H19M14.6 13.4H19"/>
+  </symbol>
+  <symbol id="icon-class" viewBox="0 0 24 24">
+    <path d="M12 3.2 2.6 7.6 12 12l9.4-4.4L12 3.2Z"/>
+    <path d="M6.2 9.8v5.4c0 1.7 2.6 3 5.8 3s5.8-1.3 5.8-3V9.8"/>
+  </symbol>
+  <symbol id="icon-term" viewBox="0 0 24 24">
+    <path d="M7 3.4h10a1 1 0 0 1 1 1v16.2l-6-3.6-6 3.6V4.4a1 1 0 0 1 1-1Z"/>
+  </symbol>
+  <symbol id="icon-calendar" viewBox="0 0 24 24">
+    <rect x="3.4" y="5.2" width="17.2" height="15.4" rx="2"/>
+    <path d="M8 3v4.2M16 3v4.2M3.4 10.2h17.2"/>
+  </symbol>
+  <symbol id="icon-book" viewBox="0 0 24 24">
+    <path d="M5 4.2h8.4a2.6 2.6 0 0 1 2.6 2.6v12.8a2.2 2.2 0 0 0-2.2-2.2H5V4.2Z"/>
+    <path d="M16 6.8a2.6 2.6 0 0 1 2.6-2.6H21v13.2h-2.8"/>
+  </symbol>
+  <symbol id="icon-print" viewBox="0 0 24 24">
+    <path d="M7 9.2V3.6h10v5.6M7 18H5.6A1.6 1.6 0 0 1 4 16.4V11a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5.4A1.6 1.6 0 0 1 18.4 18H17"/>
+    <rect x="7" y="14" width="10" height="6.4" rx="1"/>
+  </symbol>
+</svg>
+
+<div class="toolbar no-print">
+  <button type="button" class="btn" data-print>
+    <svg class="btn__icon" aria-hidden="true" focusable="false"><use href="#icon-print"></use></svg>
+    Print or save as PDF
+  </button>
+  <p class="toolbar__hint">Click any field on the card to edit it. Grades, totals and percentage update as you type.</p>
+</div>
+
+<main class="card">
+  <div class="card__frame" aria-hidden="true"></div>
+
+  <header class="masthead">
+    <span class="crest">
+      <svg class="crest__icon" aria-hidden="true" focusable="false"><use href="#icon-crest"></use></svg>
+    </span>
+    <p class="masthead__eyebrow" contenteditable="true">Established 1962</p>
+    <h1 class="masthead__name" contenteditable="true">Maplewood Academy</h1>
+    <p class="masthead__address" contenteditable="true">148 Bellwood Avenue, Ottawa, Ontario K1P 0A0 &middot; (613) 555 0100 &middot; maplewood.example</p>
+
+    <div class="divider" aria-hidden="true"><span class="divider__diamond"></span></div>
+
+    <h2 class="masthead__title">Student Report Card</h2>
+    <p class="masthead__term">
+      <span contenteditable="true">Term II</span> &middot;
+      Academic year <span contenteditable="true">2025&ndash;2026</span>
+    </p>
+  </header>
+
+  <section class="identity" aria-label="Student details">
+    <div class="field field--wide">
+      <svg class="field__icon" aria-hidden="true" focusable="false"><use href="#icon-user"></use></svg>
+      <span class="field__body">
+        <span class="field__label">Student name</span>
+        <span class="field__value field__value--name" contenteditable="true">Amara Okonkwo</span>
+      </span>
+    </div>
+    <div class="field">
+      <svg class="field__icon" aria-hidden="true" focusable="false"><use href="#icon-id"></use></svg>
+      <span class="field__body">
+        <span class="field__label">Student ID</span>
+        <span class="field__value" contenteditable="true">MA-2026-0184</span>
+      </span>
+    </div>
+    <div class="field">
+      <svg class="field__icon" aria-hidden="true" focusable="false"><use href="#icon-class"></use></svg>
+      <span class="field__body">
+        <span class="field__label">Class and section</span>
+        <span class="field__value" contenteditable="true">Grade 9 &middot; B</span>
+      </span>
+    </div>
+    <div class="field">
+      <svg class="field__icon" aria-hidden="true" focusable="false"><use href="#icon-term"></use></svg>
+      <span class="field__body">
+        <span class="field__label">Term</span>
+        <span class="field__value" contenteditable="true">Term II</span>
+      </span>
+    </div>
+    <div class="field">
+      <svg class="field__icon" aria-hidden="true" focusable="false"><use href="#icon-calendar"></use></svg>
+      <span class="field__body">
+        <span class="field__label">Date of issue</span>
+        <span class="field__value" contenteditable="true">12 June 2026</span>
+      </span>
+    </div>
+  </section>
+
+  <table class="marks" data-marks-table>
+    <caption>Academic performance</caption>
+    <thead>
+      <tr>
+        <th scope="col">Subject</th>
+        <th scope="col" class="col-num">Marks obtained</th>
+        <th scope="col" class="col-num">Maximum marks</th>
+        <th scope="col" class="col-grade">Grade</th>
+        <th scope="col" class="col-remark">Remarks</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr data-subject>
+        <th scope="row">
+          <span class="subject">
+            <svg class="subject__icon" aria-hidden="true" focusable="false"><use href="#icon-book"></use></svg>
+            <span contenteditable="true">English Language Arts</span>
+          </span>
+        </th>
+        <td class="cell--num" data-role="obtained" contenteditable="true">88</td>
+        <td class="cell--num" data-role="max" contenteditable="true">100</td>
+        <td class="cell--derived" data-role="row-grade">&ndash;</td>
+        <td class="cell--remark" data-role="remark" contenteditable="true">Strong analytical writing.</td>
+      </tr>
+      <tr data-subject>
+        <th scope="row">
+          <span class="subject">
+            <svg class="subject__icon" aria-hidden="true" focusable="false"><use href="#icon-book"></use></svg>
+            <span contenteditable="true">Mathematics</span>
+          </span>
+        </th>
+        <td class="cell--num" data-role="obtained" contenteditable="true">92</td>
+        <td class="cell--num" data-role="max" contenteditable="true">100</td>
+        <td class="cell--derived" data-role="row-grade">&ndash;</td>
+        <td class="cell--remark" data-role="remark" contenteditable="true">Excellent problem solving.</td>
+      </tr>
+      <tr data-subject>
+        <th scope="row">
+          <span class="subject">
+            <svg class="subject__icon" aria-hidden="true" focusable="false"><use href="#icon-book"></use></svg>
+            <span contenteditable="true">Science</span>
+          </span>
+        </th>
+        <td class="cell--num" data-role="obtained" contenteditable="true">79</td>
+        <td class="cell--num" data-role="max" contenteditable="true">100</td>
+        <td class="cell--derived" data-role="row-grade">&ndash;</td>
+        <td class="cell--remark" data-role="remark" contenteditable="true">Careful lab work.</td>
+      </tr>
+      <tr data-subject>
+        <th scope="row">
+          <span class="subject">
+            <svg class="subject__icon" aria-hidden="true" focusable="false"><use href="#icon-book"></use></svg>
+            <span contenteditable="true">Social Studies</span>
+          </span>
+        </th>
+        <td class="cell--num" data-role="obtained" contenteditable="true">74</td>
+        <td class="cell--num" data-role="max" contenteditable="true">100</td>
+        <td class="cell--derived" data-role="row-grade">&ndash;</td>
+        <td class="cell--remark" data-role="remark" contenteditable="true">Participates in discussion.</td>
+      </tr>
+      <tr data-subject>
+        <th scope="row">
+          <span class="subject">
+            <svg class="subject__icon" aria-hidden="true" focusable="false"><use href="#icon-book"></use></svg>
+            <span contenteditable="true">French</span>
+          </span>
+        </th>
+        <td class="cell--num" data-role="obtained" contenteditable="true">68</td>
+        <td class="cell--num" data-role="max" contenteditable="true">100</td>
+        <td class="cell--derived" data-role="row-grade">&ndash;</td>
+        <td class="cell--remark" data-role="remark" contenteditable="true">Oral work improving.</td>
+      </tr>
+      <tr data-subject>
+        <th scope="row">
+          <span class="subject">
+            <svg class="subject__icon" aria-hidden="true" focusable="false"><use href="#icon-book"></use></svg>
+            <span contenteditable="true">Computer Studies</span>
+          </span>
+        </th>
+        <td class="cell--num" data-role="obtained" contenteditable="true">95</td>
+        <td class="cell--num" data-role="max" contenteditable="true">100</td>
+        <td class="cell--derived" data-role="row-grade">&ndash;</td>
+        <td class="cell--remark" data-role="remark" contenteditable="true">Outstanding project work.</td>
+      </tr>
+      <tr data-subject>
+        <th scope="row">
+          <span class="subject">
+            <svg class="subject__icon" aria-hidden="true" focusable="false"><use href="#icon-book"></use></svg>
+            <span contenteditable="true">Art and Design</span>
+          </span>
+        </th>
+        <td class="cell--num" data-role="obtained" contenteditable="true">42</td>
+        <td class="cell--num" data-role="max" contenteditable="true">50</td>
+        <td class="cell--derived" data-role="row-grade">&ndash;</td>
+        <td class="cell--remark" data-role="remark" contenteditable="true">Confident use of colour.</td>
+      </tr>
+      <tr data-subject>
+        <th scope="row">
+          <span class="subject">
+            <svg class="subject__icon" aria-hidden="true" focusable="false"><use href="#icon-book"></use></svg>
+            <span contenteditable="true">Physical Education</span>
+          </span>
+        </th>
+        <td class="cell--num" data-role="obtained" contenteditable="true">45</td>
+        <td class="cell--num" data-role="max" contenteditable="true">50</td>
+        <td class="cell--derived" data-role="row-grade">&ndash;</td>
+        <td class="cell--remark" data-role="remark" contenteditable="true">Reliable team member.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <section class="summary" data-summary aria-live="polite" aria-label="Result summary">
+    <div class="summary__cell">
+      <span class="summary__label">Total marks</span>
+      <span class="summary__value">
+        <span data-role="total-obtained">&ndash;</span> / <span data-role="total-max">&ndash;</span>
+      </span>
+    </div>
+    <div class="summary__cell summary__cell--accent">
+      <span class="summary__label">Percentage</span>
+      <span class="summary__value" data-role="percentage">&ndash;</span>
+    </div>
+    <div class="summary__cell">
+      <span class="summary__label">Overall grade</span>
+      <span class="summary__value" data-role="overall-grade">&ndash;</span>
+    </div>
+  </section>
+
+  <p class="legend">
+    Grading scale: 90 and above A+ &middot; 80&ndash;89 A &middot; 70&ndash;79 B &middot; 60&ndash;69 C &middot; 40&ndash;59 D &middot; below 40 F.
+    Totals exclude any row whose marks are missing or out of range.
+  </p>
+
+  <section class="signatures" aria-label="Signatures">
+    <div class="signature">
+      <div class="signature__line"></div>
+      <span class="signature__role">Class teacher</span>
+      <span class="signature__meta" contenteditable="true">R. Deschamps</span>
+      <span class="signature__meta" contenteditable="true">Date: 12 June 2026</span>
+    </div>
+    <div class="signature">
+      <div class="signature__line"></div>
+      <span class="signature__role">Principal</span>
+      <span class="signature__meta" contenteditable="true">H. Nakamura</span>
+      <span class="signature__meta" contenteditable="true">Date: 12 June 2026</span>
+    </div>
+    <div class="signature">
+      <div class="signature__line"></div>
+      <span class="signature__role">Parent or guardian</span>
+      <span class="signature__meta" contenteditable="true">Name</span>
+      <span class="signature__meta" contenteditable="true">Date:</span>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  /* Grade bands, ordered by descending lower bound and resolved on first
+     match. Applying a different grading scheme is an edit to this table
+     alone: nothing else in the file hard-codes a boundary or a letter. */
+  var GRADE_BANDS = [[90, 'A+'], [80, 'A'], [70, 'B'], [60, 'C'], [40, 'D'], [0, 'F']];
+
+  /* Shown wherever a figure cannot be computed, so a bad entry never
+     renders as NaN. */
+  var PLACEHOLDER = '–';
+
+  /* Strict: digits, with at most two decimal places. No signs, no
+     exponents, no thousands separators. */
+  var NUMBER_PATTERN = /^\d{1,4}(?:\.\d{1,2})?$/;
+
+  var table = document.querySelector('[data-marks-table]');
+  var summary = document.querySelector('[data-summary]');
+  var printButton = document.querySelector('[data-print]');
+
+  if (printButton) {
+    printButton.addEventListener('click', function () { window.print(); });
+  }
+
+  if (!table || !summary) { return; }
+
+  function pick(role, scope) {
+    return (scope || document).querySelector('[data-role="' + role + '"]');
+  }
+
+  function setText(role, value) {
+    var element = pick(role, summary);
+    if (element) { element.textContent = value; }
+  }
+
+  function flag(cell, invalid) {
+    if (!cell) { return; }
+    if (invalid) {
+      cell.classList.add('is-invalid');
+      cell.setAttribute('aria-invalid', 'true');
+    } else {
+      cell.classList.remove('is-invalid');
+      cell.removeAttribute('aria-invalid');
+    }
+  }
+
+  /* Reads one editable cell into { empty, valid, value }. Whitespace,
+     including the non-breaking spaces contenteditable likes to insert,
+     is stripped before the pattern test. */
+  function read(cell) {
+    var text = cell ? cell.textContent.replace(/\s+/g, '') : '';
+    if (text === '') { return { empty: true, valid: true, value: 0 }; }
+    if (!NUMBER_PATTERN.test(text)) { return { empty: false, valid: false, value: 0 }; }
+    return { empty: false, valid: true, value: parseFloat(text) };
+  }
+
+  function format(value) {
+    return String(Math.round(value * 100) / 100);
+  }
+
+  function gradeFor(percentage) {
+    for (var i = 0; i < GRADE_BANDS.length; i++) {
+      if (percentage >= GRADE_BANDS[i][0]) { return GRADE_BANDS[i][1]; }
+    }
+    return GRADE_BANDS[GRADE_BANDS.length - 1][1];
+  }
+
+  function recalculate() {
+    var rows = table.querySelectorAll('[data-subject]');
+    var totalObtained = 0;
+    var totalMax = 0;
+    var counted = 0;
+
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var obtainedCell = pick('obtained', row);
+      var maxCell = pick('max', row);
+      var gradeCell = pick('row-grade', row);
+
+      var obtained = read(obtainedCell);
+      var max = read(maxCell);
+
+      var maxUsable = max.valid && !max.empty && max.value > 0;
+      var obtainedUsable = obtained.valid && !obtained.empty &&
+                           (!maxUsable || obtained.value <= max.value);
+
+      /* Blank is not an error; anything present and unusable is. */
+      flag(maxCell, !max.empty && (!max.valid || max.value <= 0));
+      flag(obtainedCell, !obtained.empty && !obtainedUsable);
+
+      if (maxUsable && obtainedUsable) {
+        totalObtained += obtained.value;
+        totalMax += max.value;
+        counted++;
+        if (gradeCell) {
+          gradeCell.textContent = gradeFor((obtained.value / max.value) * 100);
+        }
+      } else if (gradeCell) {
+        gradeCell.textContent = PLACEHOLDER;
+      }
+    }
+
+    var hasTotals = counted > 0 && totalMax > 0;
+    var percentage = hasTotals ? (totalObtained / totalMax) * 100 : 0;
+
+    setText('total-obtained', hasTotals ? format(totalObtained) : PLACEHOLDER);
+    setText('total-max', hasTotals ? format(totalMax) : PLACEHOLDER);
+    setText('percentage', hasTotals ? percentage.toFixed(1) + '%' : PLACEHOLDER);
+    setText('overall-grade', hasTotals ? gradeFor(percentage) : PLACEHOLDER);
+  }
+
+  function editableFrom(node) {
+    if (!node) { return null; }
+    var element = node.nodeType === 1 ? node : node.parentElement;
+    return element && element.closest ? element.closest('[contenteditable="true"]') : null;
+  }
+
+  /* Paste is the only way markup could enter an editable region, so the
+     clipboard is read as text/plain and inserted as a text node. */
+  function insertPlainText(text) {
+    try {
+      if (document.execCommand && document.execCommand('insertText', false, text)) {
+        return true;
+      }
+    } catch (error) { /* fall through to the range-based insert */ }
+
+    var selection = window.getSelection();
+    if (!selection || !selection.rangeCount) { return false; }
+    var range = selection.getRangeAt(0);
+    range.deleteContents();
+    var node = document.createTextNode(text);
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return false;
+  }
+
+  document.addEventListener('paste', function (event) {
+    var field = editableFrom(event.target);
+    if (!field) { return; }
+    event.preventDefault();
+
+    var clipboard = event.clipboardData || window.clipboardData;
+    var text = clipboard ? clipboard.getData('text/plain') : '';
+    var handledByBrowser = insertPlainText(String(text).replace(/\s+/g, ' ').trim());
+
+    /* execCommand fires input itself; the range fallback does not. */
+    if (!handledByBrowser) {
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+
+  /* Every field is single line. Blocking Enter keeps the card on one page
+     and stops the browser inserting div or br into a value. */
+  document.addEventListener('keydown', function (event) {
+    if (event.key !== 'Enter') { return; }
+    var field = editableFrom(event.target);
+    if (!field) { return; }
+    event.preventDefault();
+    field.blur();
+  });
+
+  table.addEventListener('input', recalculate);
+  recalculate();
+}());
+</script>
+
+</body>
+</html>
